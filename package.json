@@ -1,0 +1,74 @@
+{
+  "name": "headersafe",
+  "version": "1.0.0",
+  "description": "Zero-dependency strict CSP, CORS, cookie and security header hardening for Node.js and Web standards",
+  "type": "module",
+  "main": "./cjs/index.cjs",
+  "module": "./src/index.mjs",
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./src/index.mjs",
+      "require": "./cjs/index.cjs"
+    },
+    "./csp": {
+      "types": "./types/index.d.ts",
+      "import": "./src/csp.mjs",
+      "require": "./cjs/index.cjs"
+    },
+    "./cors": {
+      "types": "./types/index.d.ts",
+      "import": "./src/cors.mjs",
+      "require": "./cjs/index.cjs"
+    },
+    "./cookies": {
+      "types": "./types/index.d.ts",
+      "import": "./src/cookies.mjs",
+      "require": "./cjs/index.cjs"
+    },
+    "./headers": {
+      "types": "./types/index.d.ts",
+      "import": "./src/headers.mjs",
+      "require": "./cjs/index.cjs"
+    },
+    "./adapters": {
+      "types": "./types/index.d.ts",
+      "import": "./src/adapters.mjs",
+      "require": "./cjs/index.cjs"
+    }
+  },
+  "files": [
+    "src",
+    "cjs",
+    "types",
+    "README.md",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "GOOD_FIRST_ISSUES.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "security",
+    "headers",
+    "csp",
+    "cors",
+    "cookies",
+    "hsts",
+    "helmet",
+    "workers",
+    "edge",
+    "fetch",
+    "zero-dependency"
+  ],
+  "license": "MIT",
+  "sideEffects": false,
+  "dependencies": {},
+  "devDependencies": {}
+}
