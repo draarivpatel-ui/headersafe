@@ -1,7 +1,15 @@
 {
   "name": "headersafe",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Zero-dependency strict CSP, CORS, cookie and security header hardening for Node.js and Web standards",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/draarivpatel-ui/headersafe.git"
+  },
+  "homepage": "https://github.com/draarivpatel-ui/headersafe#readme",
+  "bugs": {
+    "url": "https://github.com/draarivpatel-ui/headersafe/issues"
+  },
   "type": "module",
   "main": "./cjs/index.cjs",
   "module": "./src/index.mjs",

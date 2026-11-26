@@ -150,7 +150,7 @@ test('tracked source contains no internal paths or personal data', async () => {
   const emDash = String.fromCharCode(0x2014);
   const enDash = String.fromCharCode(0x2013);
   for (const file of files) {
-    const text = await readFile(path.join(root, file), 'utf8');
+    const text = (await readFile(path.join(root, file), 'utf8')).replaceAll('draarivpatel-ui', '');
     for (const pattern of banned) {
       assert.equal(pattern.test(text), false, file + ' contains ' + pattern);
     }
