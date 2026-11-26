@@ -5,9 +5,11 @@
 /*
  * headersafe core.
  *
- * Pure Web Standards JavaScript. No imports, no Node built-ins, no runtime
- * dependencies. The CommonJS build in cjs/index.cjs is generated from this
- * file by scripts/build-cjs.mjs so both module formats have identical behavior.
+ * Pure Web Standards JavaScript with no static imports and no runtime
+ * dependencies. Node 18's Web Crypto implementation is loaded conditionally
+ * because it predates globalThis.crypto. The CommonJS build in cjs/index.cjs
+ * is generated from this file by scripts/build-cjs.mjs so both module formats
+ * have identical behavior.
  */
 
 const CODE = Object.freeze({
@@ -470,9 +472,15 @@ function auditCsp(input, options = {}) {
   };
 }
 
+let runtimeCrypto = globalThis.crypto;
+if ((!runtimeCrypto || typeof runtimeCrypto.getRandomValues !== 'function') && typeof process !== 'undefined' && process.versions && process.versions.node) {
+  runtimeCrypto = require('node:crypto').webcrypto;
+}
+
 function getCrypto() {
   const candidate = globalThis && globalThis.crypto;
   if (candidate && typeof candidate.getRandomValues === 'function') return candidate;
+  if (runtimeCrypto && typeof runtimeCrypto.getRandomValues === 'function') return runtimeCrypto;
   return null;
 }
 

@@ -20,6 +20,9 @@ const EXPORT_NAMES = [
 ];
 
 let body = source;
+const nodeCryptoImport = "runtimeCrypto = (await import('node:crypto')).webcrypto;";
+if (!body.includes(nodeCryptoImport)) throw new Error('CJS transform could not find the Node crypto fallback');
+body = body.replace(nodeCryptoImport, "runtimeCrypto = require('node:crypto').webcrypto;");
 body = body.replace(/^export const /gm, 'const ');
 body = body.replace(/^export class /gm, 'class ');
 body = body.replace(/^export function /gm, 'function ');
