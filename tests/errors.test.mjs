@@ -60,6 +60,13 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
     assert.equal(api.hasCrlf(undefined), false);
   });
 
+  test(label + ': rejects non-Latin-1 values that can truncate into CR or LF', () => {
+    for (const value of ['ačb', 'aĊb', 'aȊb', 'a＊b', 'a\u{1F600}b']) {
+      throwsCode(() => api.assertSafeHeaderValue(value), api.CODE.HEADER_VALUE, label + ' ' + JSON.stringify(value));
+    }
+    assert.equal(api.assertSafeHeaderValue('café'), 'café');
+  });
+
   test(label + ': mergeVary is case-insensitive and idempotent', () => {
     assert.equal(api.mergeVary(undefined), 'Origin');
     assert.equal(api.mergeVary(''), 'Origin');
@@ -68,6 +75,14 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
     assert.equal(api.mergeVary('Accept, Origin'), 'Accept, Origin');
     assert.equal(api.mergeVary('Accept,  Origin '), 'Accept, Origin');
     throwsCode(() => api.mergeVary('a;b'), api.CODE.HEADER_VALUE);
+  });
+
+  test(label + ': mergeVary accepts arrays and treats star as terminal', () => {
+    assert.equal(api.mergeVary(['Accept-Encoding', 'Accept-Language']), 'Accept-Encoding, Accept-Language, Origin');
+    assert.equal(api.mergeVary([]), 'Origin');
+    assert.equal(api.mergeVary('*'), '*');
+    assert.equal(api.mergeVary(['*']), '*');
+    throwsCode(() => api.mergeVary(['Ok', 'a\r\nb']), api.CODE.CRLF);
   });
 }
 

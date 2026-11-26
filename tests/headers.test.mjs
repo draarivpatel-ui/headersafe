@@ -65,7 +65,7 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
         payment: ['https://pay.example']
       }
     });
-    assert.equal(headers['Permissions-Policy'], 'camera=(), geolocation=(self), payment=(https://pay.example)');
+    assert.equal(headers['Permissions-Policy'], 'camera=(), geolocation=(self), payment=("https://pay.example")');
   });
 
   test(label + ': wildcard Permissions-Policy requires opt-in', () => {
@@ -115,6 +115,17 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
     const fetch = fetchHeaders({ vary: 'Accept-Encoding' });
     applyHeaderRecord(fetch, { Vary: 'Origin' });
     assert.equal(fetch.get('Vary'), 'Accept-Encoding, Origin');
+  });
+
+  test(label + ': applyHeaderRecord handles array-valued and star Vary', () => {
+    const node = nodeResponse();
+    node.setHeader('Vary', ['Accept-Encoding', 'Accept-Language']);
+    applyHeaderRecord(node, { Vary: 'Origin' });
+    assert.equal(node.getHeader('Vary'), 'Accept-Encoding, Accept-Language, Origin');
+    const star = nodeResponse();
+    star.setHeader('Vary', '*');
+    applyHeaderRecord(star, { Vary: 'Origin' });
+    assert.equal(star.getHeader('Vary'), '*');
   });
 
   test(label + ': applyHeaderRecord rejects injected records', () => {

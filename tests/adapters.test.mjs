@@ -101,4 +101,17 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
     assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
     assert.match(response.headers.get('Content-Security-Policy'), /frame-ancestors 'none'/);
   });
+
+  test(label + ': wrapped Fetch responses keep every Set-Cookie header', async () => {
+    if (typeof new Headers().getSetCookie !== 'function') return;
+    const wrapped = withSecurityHeaders(() => {
+      const headers = new Headers();
+      headers.append('Set-Cookie', 'a=1; Path=/; HttpOnly; Secure');
+      headers.append('Set-Cookie', 'b=2; Path=/; HttpOnly; Secure');
+      return new Response('ok', { status: 200, headers });
+    });
+    const response = await wrapped({});
+    assert.deepEqual(response.headers.getSetCookie(), ['a=1; Path=/; HttpOnly; Secure', 'b=2; Path=/; HttpOnly; Secure']);
+    assert.equal(response.headers.get('X-Frame-Options'), 'DENY');
+  });
 }

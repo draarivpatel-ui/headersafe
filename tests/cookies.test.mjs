@@ -76,8 +76,19 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
     throwsCode(() => serializeSafeCookie('sid', 'abc123', { priority: 'Urgent' }), CODE.COOKIE_ATTRIBUTE);
     throwsCode(() => serializeSafeCookie('sid', 'abc123', { maxAge: -1 }), CODE.COOKIE_ATTRIBUTE);
     throwsCode(() => serializeSafeCookie('sid', 'abc123', { maxAge: 1.5 }), CODE.COOKIE_ATTRIBUTE);
+    throwsCode(() => serializeSafeCookie('sid', 'abc123', { maxAge: NaN }), CODE.COOKIE_ATTRIBUTE);
+    throwsCode(() => serializeSafeCookie('sid', 'abc123', { maxAge: Infinity }), CODE.COOKIE_ATTRIBUTE);
     throwsCode(() => serializeSafeCookie('sid', 'abc123', { expires: new Date('bad') }), CODE.COOKIE_ATTRIBUTE);
+    throwsCode(() => serializeSafeCookie('sid', 'abc123', { expires: 'not-a-date' }), CODE.COOKIE_ATTRIBUTE);
+    assert.match(serializeSafeCookie('sid', 'abc123', { expires: 'Wed, 21 Oct 2015 07:28:00 GMT' }), /Expires=Wed, 21 Oct 2015 07:28:00 GMT/);
+    throwsCode(() => serializeSafeCookie('__Host-sid', 'abc123', { path: '//' }), CODE.COOKIE_PREFIX);
     throwsCode(() => serializeSafeCookie('sid', 'abc123', { partitioned: true, secure: false }), CODE.COOKIE_ATTRIBUTE);
+  });
+
+  test(label + ': empty cookie values support deletion cookies', () => {
+    const cookie = serializeSafeCookie('sid', '', { maxAge: 0 });
+    assert.equal(cookie, 'sid=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax');
+    assert.deepEqual(auditSetCookie('sid=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax').findings, []);
   });
 
   test(label + ': parseSetCookie parses attributes', () => {

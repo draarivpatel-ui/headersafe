@@ -32,6 +32,23 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
     assert.equal(header, "default-src 'self'; img-src https://cdn.example");
   });
 
+  test(label + ': buildCsp merges array policies with boolean directives', () => {
+    const header = buildCsp([
+      { 'default-src': ["'none'"], 'upgrade-insecure-requests': true },
+      'img-src https://cdn.example'
+    ]);
+    assert.equal(header, "default-src 'none'; img-src https://cdn.example; upgrade-insecure-requests");
+  });
+
+  test(label + ': buildCsp honors inline build options in the policy object', () => {
+    const header = buildCsp({ preset: 'strict', nonces: 'abcdefgh1234' });
+    assert.match(header, /'nonce-abcdefgh1234'/);
+    assert.doesNotMatch(header, /(?:^|; )nonces /);
+    const audited = auditCsp({ preset: 'strict', nonces: 'abcdefgh1234' });
+    assert.equal(audited.ok, true);
+    assert.equal(audited.directives.nonces, undefined);
+  });
+
   test(label + ': buildCsp accepts boolean directives', () => {
     const header = buildCsp({ 'upgrade-insecure-requests': true, 'block-all-mixed-content': true });
     assert.equal(header, 'upgrade-insecure-requests; block-all-mixed-content');
@@ -49,6 +66,8 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
       throwsCode(() => buildCsp({ 'script-src': [source] }), expected, label + ' source ' + JSON.stringify(source));
     }
     throwsCode(() => buildCsp("default-src 'self'; script-src 'self'\r\nX-Evil: 1"), CODE.CRLF, label + ' header CRLF');
+    throwsCode(() => buildCsp({ 'script-src': ["'self'č"] }), CODE.HEADER_VALUE, label + ' latin-1 truncation');
+    throwsCode(() => parseCsp("default-src 'self'ĊX-Evil: 1"), CODE.HEADER_VALUE, label + ' parsed latin-1 truncation');
   });
 
   test(label + ': buildCsp rejects comma injection in sources', () => {
@@ -86,6 +105,10 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
     throwsCode(() => buildCsp({}, { nonces: 'has;evil' }), CODE.INVALID_INPUT);
     throwsCode(() => buildCsp({}, { hashes: "'md5-abc'" }), CODE.CSP_SOURCE);
     throwsCode(() => buildCsp({}, { hashes: { algorithm: 'md5', value: 'abc' } }), CODE.CSP_SOURCE);
+  });
+
+  test(label + ': buildCsp accepts base64url hash values', () => {
+    assert.match(buildCsp({}, { hashes: { algorithm: 'sha256', value: 'YWJjZA-_' } }), /'sha256-YWJjZA-_'/);
   });
 
   test(label + ': parseCsp handles repeated directives and casing', () => {
@@ -153,6 +176,27 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
   test(label + ': auditCsp audits an object policy', () => {
     const result = auditCsp(buildCsp({ preset: 'strict' }, { nonces: 'abcdefgh1234' }));
     assert.equal(result.ok, true);
+  });
+
+  test(label + ': auditCsp accepts boolean and string directive values', () => {
+    const base = { 'object-src': "'none'", 'base-uri': "'none'", 'frame-ancestors': "'none'", 'form-action': "'self'" };
+    const bool = auditCsp({ ...base, 'default-src': "'none'", 'script-src': "'self'", 'upgrade-insecure-requests': true });
+    assert.equal(bool.ok, true);
+    assert.deepEqual(bool.directives['upgrade-insecure-requests'], []);
+    const stringValue = auditCsp({ ...base, 'default-src': "'none'", 'script-src': "'self' 'unsafe-eval'" });
+    assert.ok(stringValue.findings.some((f) => f.id === 'UNSAFE_EVAL'));
+  });
+
+  test(label + ': auditCsp flags bare scheme sources and script-src-attr', () => {
+    const scheme = auditCsp("default-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; script-src https:");
+    assert.ok(scheme.findings.some((f) => f.id === 'SCHEME_WILDCARD_SCRIPT_SRC' && f.severity === 'critical'));
+    const attr = auditCsp("default-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; script-src-attr 'unsafe-inline'");
+    assert.ok(attr.findings.some((f) => f.id === 'UNSAFE_SCRIPT_SRC_ATTR' && f.severity === 'critical'));
+    const frames = auditCsp("default-src 'none'; object-src 'none'; base-uri https:; frame-ancestors https:; form-action https:; script-src 'self'");
+    const ids = frames.findings.map((f) => f.id);
+    for (const id of ['UNSAFE_BASE_URI', 'WILDCARD_FRAME_ANCESTORS', 'WEAK_FORM_ACTION']) {
+      assert.ok(ids.includes(id), 'missing ' + id);
+    }
   });
 
   test(label + ': auditCsp score is clamped between 0 and 100', () => {

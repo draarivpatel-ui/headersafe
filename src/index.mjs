@@ -50,8 +50,12 @@ function fail(code, reason, field, value) {
 
 const TOKEN_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const CSP_NAME_RE = /^[a-zA-Z0-9-]+$/;
-const COOKIE_OCTET_RE = /^[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]+$/;
+const COOKIE_OCTET_RE = /^[\x21\x23-\x2B\x2D-\x3A\x3C-\x5B\x5D-\x7E]*$/;
 const CONTROL_RE = /[\x00-\x1F\x7F\u2028\u2029]/;
+// Any code point above U+00FF can lose its high byte when a downstream
+// serializer encodes the value as latin-1, turning U+010D into CR and U+010A
+// into LF (the classic Node header-splitting primitive).
+const NON_LATIN1_RE = /[^\t\x20-\x7E\x80-\xFF]/;
 
 export function assertSafeHeaderName(name, field = 'headerName') {
   if (typeof name !== 'string' || name.length === 0) {
@@ -73,6 +77,9 @@ export function assertSafeHeaderValue(value, field = 'headerValue', options = {}
   if (CONTROL_RE.test(value)) {
     fail(CODE.CONTROL_CHARACTER, 'control characters are not allowed in a header value', field, value);
   }
+  if (NON_LATIN1_RE.test(value)) {
+    fail(CODE.HEADER_VALUE, 'header value contains a character above U+00FF that can be truncated into CR or LF', field, value);
+  }
   if (options.forbidSemicolon && value.indexOf(';') !== -1) {
     fail(CODE.HEADER_VALUE, 'semicolon is not allowed in this header value', field, value);
   }
@@ -88,9 +95,22 @@ export function hasCrlf(value) {
 
 export function mergeVary(existing, addition = 'Origin') {
   assertSafeHeaderValue(addition, 'Vary', { forbidSemicolon: true });
-  if (existing === undefined || existing === null || existing === '') return addition;
-  assertSafeHeaderValue(existing, 'Vary', { forbidSemicolon: true });
-  const parts = String(existing).split(',').map((part) => part.trim()).filter(Boolean);
+  const parts = [];
+  const collect = (value) => {
+    if (value === undefined || value === null || value === '') return;
+    if (Array.isArray(value)) {
+      for (const item of value) collect(item);
+      return;
+    }
+    assertSafeHeaderValue(value, 'Vary', { forbidSemicolon: true });
+    for (const part of String(value).split(',')) {
+      const trimmed = part.trim();
+      if (trimmed !== '') parts.push(trimmed);
+    }
+  };
+  collect(existing);
+  if (parts.indexOf('*') !== -1) return '*';
+  if (parts.length === 0) return addition;
   if (!parts.some((part) => part.toLowerCase() === addition.toLowerCase())) {
     parts.push(addition);
   }
@@ -195,6 +215,8 @@ function normalizeCspSources(name, input) {
   return tokens;
 }
 
+const CSP_INLINE_OPTIONS = new Set(['preset', 'nonces', 'hashes', 'strictDynamic', 'reportOnly']);
+
 function normalizeCspPolicy(policy, options = {}) {
   let source = policy;
   if (source === undefined || source === null) source = {};
@@ -204,8 +226,18 @@ function normalizeCspPolicy(policy, options = {}) {
     const merged = {};
     for (const item of source) {
       const parsed = typeof item === 'string' ? parseCspString(item, 'csp') : item;
+      if (parsed === null || typeof parsed !== 'object') {
+        fail(CODE.INVALID_INPUT, 'CSP policy must be an object, string or array', 'policy', item);
+      }
       for (const key of Object.keys(parsed)) {
-        merged[key] = (merged[key] || []).concat(parsed[key]);
+        if (CSP_INLINE_OPTIONS.has(key)) continue;
+        const value = parsed[key];
+        if (value === true || value === false) {
+          merged[key] = value;
+          continue;
+        }
+        const list = Array.isArray(value) ? value.slice() : [value];
+        merged[key] = Array.isArray(merged[key]) ? merged[key].concat(list) : list;
       }
     }
     source = merged;
@@ -213,7 +245,8 @@ function normalizeCspPolicy(policy, options = {}) {
     fail(CODE.INVALID_INPUT, 'CSP policy must be an object, string or array', 'policy', policy);
   }
 
-  const preset = options.preset !== undefined ? options.preset : source.preset;
+  const pick = (name) => (options[name] !== undefined ? options[name] : source[name]);
+  const preset = pick('preset');
   const directives = {};
   if (preset !== undefined && preset !== null) {
     if (preset !== 'strict' && preset !== 'balanced') {
@@ -224,7 +257,7 @@ function normalizeCspPolicy(policy, options = {}) {
   }
 
   for (const key of Object.keys(source)) {
-    if (key === 'preset') continue;
+    if (CSP_INLINE_OPTIONS.has(key)) continue;
     const name = key.toLowerCase();
     if (!CSP_NAME_RE.test(name)) {
       fail(CODE.CSP_DIRECTIVE, 'invalid CSP directive name', 'policy', key);
@@ -236,7 +269,8 @@ function normalizeCspPolicy(policy, options = {}) {
     directives[name] = normalizeCspSources(name, source[key]);
   }
 
-  const nonces = options.nonces === undefined ? [] : (Array.isArray(options.nonces) ? options.nonces : [options.nonces]);
+  const inlineNonces = pick('nonces');
+  const nonces = inlineNonces === undefined ? [] : (Array.isArray(inlineNonces) ? inlineNonces : [inlineNonces]);
   for (const nonce of nonces) {
     assertNonce(nonce);
     const token = "'nonce-" + nonce + "'";
@@ -248,7 +282,8 @@ function normalizeCspPolicy(policy, options = {}) {
     }
   }
 
-  const hashes = options.hashes === undefined ? [] : (Array.isArray(options.hashes) ? options.hashes : [options.hashes]);
+  const inlineHashes = pick('hashes');
+  const hashes = inlineHashes === undefined ? [] : (Array.isArray(inlineHashes) ? inlineHashes : [inlineHashes]);
   for (const hash of hashes) {
     let token;
     if (typeof hash === 'string') {
@@ -258,7 +293,7 @@ function normalizeCspPolicy(policy, options = {}) {
     } else {
       fail(CODE.INVALID_INPUT, 'hash must be a string or an {algorithm, value} object', 'hashes', hash);
     }
-    if (!/^'(sha256|sha384|sha512)-[A-Za-z0-9+/=]+'$/.test(token)) {
+    if (!/^'(sha256|sha384|sha512)-[A-Za-z0-9+/=_-]+'$/.test(token)) {
       fail(CODE.CSP_SOURCE, 'invalid CSP hash source', 'hashes', hash);
     }
     directives['script-src'] = directives['script-src'] || [];
@@ -268,7 +303,8 @@ function normalizeCspPolicy(policy, options = {}) {
   }
 
   const hasCryptoSource = nonces.length > 0 || hashes.length > 0;
-  const strictDynamic = options.strictDynamic === undefined ? hasCryptoSource : options.strictDynamic;
+  const strictDynamicOption = pick('strictDynamic');
+  const strictDynamic = strictDynamicOption === undefined ? hasCryptoSource : strictDynamicOption;
   if (strictDynamic) {
     directives['script-src'] = directives['script-src'] || [];
     if (directives['script-src'].indexOf("'strict-dynamic'") === -1 && directives['script-src'].indexOf("'none'") === -1) {
@@ -325,6 +361,21 @@ function findCsp(directives, id, severity, directive, message, recommendation) {
   return { id, severity, directive, message, recommendation };
 }
 
+/** A bare scheme source such as https: or data: allows every host on that scheme. */
+function isSchemeSource(value) {
+  return /^[a-z][a-z0-9+.-]*:$/.test(value);
+}
+
+function isBroadCspSource(value) {
+  return value === '*' || isSchemeSource(value);
+}
+
+function normalizeAuditValues(value) {
+  if (Array.isArray(value)) return value.filter((item) => typeof item === 'string');
+  if (typeof value === 'string') return value.split(/\s+/).filter(Boolean);
+  return [];
+}
+
 export function auditCsp(input, options = {}) {
   const isPolicyObject = input && typeof input === 'object' && !Array.isArray(input) && !(input instanceof String);
   const buildOptionKeys = ['preset', 'nonces', 'hashes', 'strictDynamic', 'reportOnly'];
@@ -335,11 +386,16 @@ export function auditCsp(input, options = {}) {
         ? input
         : parseCsp(typeof input === 'string' ? input : buildCsp(input === undefined ? {} : input, options)));
   const normalized = {};
-  for (const key of Object.keys(directives)) normalized[key.toLowerCase()] = (directives[key] || []).slice();
+  for (const key of Object.keys(directives)) {
+    const name = key.toLowerCase();
+    const values = normalizeAuditValues(directives[key]);
+    normalized[name] = normalized[name] ? normalized[name].concat(values) : values;
+  }
 
   const script = cspValues(normalized, 'script-src').concat(cspValues(normalized, 'script-src-elem'));
   const fallback = cspValues(normalized, 'default-src');
   const effectiveScript = script.length > 0 ? script : fallback;
+  const scriptAttr = cspValues(normalized, 'script-src-attr');
   const findings = [];
 
   if (cspValues(normalized, 'default-src').length === 0) {
@@ -352,13 +408,13 @@ export function auditCsp(input, options = {}) {
   const baseUri = cspValues(normalized, 'base-uri');
   if (baseUri.length === 0) {
     findings.push(findCsp(normalized, 'MISSING_BASE_URI', 'critical', 'base-uri', 'base-uri is missing, allowing base tag hijacking.', "Set base-uri 'none' or 'self'."));
-  } else if (baseUri.some((v) => v === '*' || v === 'http:')) {
+  } else if (baseUri.some(isBroadCspSource)) {
     findings.push(findCsp(normalized, 'UNSAFE_BASE_URI', 'critical', 'base-uri', 'base-uri allows an unsafe source.', "Set base-uri 'none' or 'self'."));
   }
   const frameAncestors = cspValues(normalized, 'frame-ancestors');
   if (frameAncestors.length === 0) {
     findings.push(findCsp(normalized, 'MISSING_FRAME_ANCESTORS', 'critical', 'frame-ancestors', 'frame-ancestors is missing, allowing clickjacking.', "Set frame-ancestors 'none' or 'self'."));
-  } else if (frameAncestors.indexOf('*') !== -1) {
+  } else if (frameAncestors.some(isBroadCspSource)) {
     findings.push(findCsp(normalized, 'WILDCARD_FRAME_ANCESTORS', 'critical', 'frame-ancestors', 'frame-ancestors allows any embedding page.', "Set frame-ancestors 'none' or 'self'."));
   }
   if (effectiveScript.length === 0) {
@@ -374,6 +430,12 @@ export function auditCsp(input, options = {}) {
   if (effectiveScript.indexOf('*') !== -1 || (fallback.indexOf('*') !== -1 && script.length === 0)) {
     findings.push(findCsp(normalized, 'WILDCARD_SCRIPT_SRC', 'critical', 'script-src', 'Wildcard script source allows scripts from any host.', 'Use an explicit allowlist, nonce or hash policy.'));
   }
+  if (effectiveScript.some((v) => v !== 'data:' && isSchemeSource(v))) {
+    findings.push(findCsp(normalized, 'SCHEME_WILDCARD_SCRIPT_SRC', 'critical', 'script-src', 'A bare scheme source allows scripts from any host on that scheme.', 'Use an explicit allowlist, nonce or hash policy.'));
+  }
+  if (scriptAttr.some((v) => v === "'unsafe-inline'" || isBroadCspSource(v))) {
+    findings.push(findCsp(normalized, 'UNSAFE_SCRIPT_SRC_ATTR', 'critical', 'script-src-attr', 'script-src-attr permits inline event handlers or any host.', "Set script-src-attr 'none' and bind events with addEventListener."));
+  }
   if (effectiveScript.indexOf('data:') !== -1 || fallback.indexOf('data:') !== -1) {
     findings.push(findCsp(normalized, 'DATA_URI_SCRIPT', 'critical', 'script-src', 'data: URLs can execute script.', 'Remove data: from script sources.'));
   }
@@ -388,7 +450,7 @@ export function auditCsp(input, options = {}) {
     findings.push(findCsp(normalized, 'INSECURE_SCHEME', 'warning', 'policy', 'A plain HTTP source is present.', 'Use https: sources or upgrade-insecure-requests.'));
   }
   const formAction = cspValues(normalized, 'form-action');
-  if (formAction.length === 0 || formAction.indexOf('*') !== -1) {
+  if (formAction.length === 0 || formAction.some(isBroadCspSource)) {
     findings.push(findCsp(normalized, 'WEAK_FORM_ACTION', 'warning', 'form-action', 'form-action is missing or allows any target.', "Set form-action 'self'."));
   }
 
@@ -766,6 +828,9 @@ export function serializeSafeCookie(name, value, options = {}) {
       expires = options.expires.toUTCString();
     } else {
       expires = assertSafeHeaderValue(options.expires, 'expires', { forbidSemicolon: true });
+      if (Number.isNaN(new Date(expires).getTime())) {
+        fail(CODE.COOKIE_ATTRIBUTE, 'Expires must be a valid date', 'expires', options.expires);
+      }
     }
     parts.push('Expires=' + expires);
   }
@@ -907,7 +972,7 @@ function serializePermissionsPolicy(policy, allowWildcard) {
         tokens.push('self');
       } else {
         const normalized = validateOriginString(entry, 'permissionsPolicy', false);
-        tokens.push(normalized.replace(/"/g, ''));
+        tokens.push('"' + normalized + '"');
       }
     }
     parts.push(feature + '=(' + tokens.join(' ') + ')');
@@ -1104,15 +1169,30 @@ export function withSecurityHeaders(handler, options = {}) {
   };
 }
 
+function seedFetchHeaders(source) {
+  const merged = new Headers();
+  let copiedSetCookie = false;
+  if (source && typeof source.getSetCookie === 'function') {
+    const cookies = source.getSetCookie();
+    if (Array.isArray(cookies) && cookies.length > 0) {
+      for (const cookie of cookies) merged.append('set-cookie', cookie);
+      copiedSetCookie = true;
+    }
+  }
+  if (source && typeof source.forEach === 'function') {
+    source.forEach((value, name) => {
+      if (copiedSetCookie && String(name).toLowerCase() === 'set-cookie') return;
+      merged.append(name, value);
+    });
+  }
+  return merged;
+}
+
 function wrapFetchResponse(response, headers) {
   if (!response || typeof response.headers === 'undefined' || typeof response.arrayBuffer !== 'function') {
     return response;
   }
-  const seed = {};
-  if (response.headers && typeof response.headers.forEach === 'function') {
-    response.headers.forEach((value, name) => { seed[name] = value; });
-  }
-  const merged = new Headers(seed);
+  const merged = seedFetchHeaders(response.headers);
   applyHeaderRecord(merged, headers, { strict: true });
   const init = {
     status: response.status,

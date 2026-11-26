@@ -163,5 +163,5 @@ test('README live test count matches the actual test-file count', async () => {
   const files = (await readdir(path.join(root, 'tests'))).filter((name) => name.endsWith('.test.mjs'));
   assert.equal(files.length, 7);
   const readme = await readFile(path.join(root, 'README.md'), 'utf8');
-  assert.match(readme, /219 deterministic tests/i);
+  assert.match(readme, /239 deterministic tests/i);
 });

@@ -42,7 +42,7 @@ export declare function assertSafeHeaderValue(
   options?: { forbidSemicolon?: boolean; forbidComma?: boolean }
 ): string;
 export declare function hasCrlf(value: string): boolean;
-export declare function mergeVary(existing: string | null | undefined, addition?: string): string;
+export declare function mergeVary(existing: string | readonly string[] | null | undefined, addition?: string): string;
 
 /* ------------------------------------------------------------------ CSP */
 
@@ -175,7 +175,7 @@ export interface SecurityHeaderOptions {
   hsts?: HstsOptions | false;
   contentTypeOptions?: false;
   referrerPolicy?: string | false;
-  permissionsPolicy?: Record<string, readonly string[]> | false;
+  permissionsPolicy?: Record<string, string | readonly string[]> | true | false;
   allowWildcardPermissions?: boolean;
   crossOriginOpenerPolicy?: 'same-origin' | 'same-origin-allow-popups' | 'unsafe-none' | false;
   crossOriginResourcePolicy?: 'same-origin' | 'same-site' | 'cross-origin' | false;

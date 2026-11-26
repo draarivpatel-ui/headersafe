@@ -8,9 +8,9 @@ Fetch `Headers` and `Response`, Cloudflare Workers, Deno, Bun, and Next.js Edge.
 Ships ESM, CommonJS and strict TypeScript definitions from a single source of truth.
 
 - Zero runtime dependencies and zero `node:` imports in the core
-- 219 deterministic tests (verified live with `npm test`), run under both `import()` and `require()`
+- 239 deterministic tests (verified live with `npm test`), run under both `import()` and `require()`
 - Every rejection is a typed `HeaderSafeError` with a stable machine-readable code
-- CRLF, control-character and semicolon injection rejected at every boundary
+- CRLF, control-character, semicolon and non-Latin-1 truncation injection rejected at every boundary
 
 ## Install
 
@@ -83,7 +83,8 @@ app.use((req, res, next) => {
 app.get('/health', withSecurityHeaders((req, res) => res.json({ ok: true })));
 ```
 
-`apply()` merges `Vary: Origin` with any existing `Vary` value, case-insensitively.
+`apply()` merges `Vary: Origin` with any existing `Vary` value, case-insensitively,
+accepting a string or a Node-style array. A `Vary: *` value stays terminal.
 
 ## Next.js (Edge and Node middleware)
 
@@ -197,7 +198,8 @@ callers pass untrusted origins, cookie values and policy fragments through its
 validators, and that the runtime itself correctly enforces the emitted headers.
 
 In scope: header injection (CRLF, NUL, control characters, semicolon and comma
-smuggling), CORS origin confusion, unsafe CSP construction, cookie prefix
+smuggling, and code points above U+00FF that a latin-1 encoder would truncate
+into CR or LF), CORS origin confusion, unsafe CSP construction, cookie prefix
 violations, and misconfigured cross-origin isolation headers.
 
 Out of scope: application authorization, CSRF token management, TLS termination,

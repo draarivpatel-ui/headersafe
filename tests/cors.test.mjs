@@ -11,6 +11,7 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
     assert.equal(policy.isAllowed('https://trusted.com:443'), false);
     assert.equal(policy.isAllowed('http://trusted.com'), false);
     assert.equal(policy.isAllowed('https://TRUSTED.COM'), true);
+    assert.equal(policy.isAllowed('HTTPS://TRUSTED.COM'), true);
   });
 
   test(label + ': substring and prefix bypass origins are rejected', () => {
@@ -118,7 +119,11 @@ for (const [label, api] of APIs.map((api, i) => [i === 0 ? 'ESM' : 'CJS', api]))
     throwsCode(() => validateCorsOrigin('https://user@trusted.com'), CODE.CORS_ORIGIN);
     throwsCode(() => validateCorsOrigin('https://trusted.com:99999'), CODE.CORS_ORIGIN);
     throwsCode(() => validateCorsOrigin('https://trusted.com/path'), CODE.CORS_ORIGIN);
+    throwsCode(() => validateCorsOrigin('https://exčample.com'), CODE.HEADER_VALUE);
+    throwsCode(() => validateCorsOrigin('https://ex\u{1F600}ample.com'), CODE.HEADER_VALUE);
+    assert.equal(createCorsPolicy({ origin: 'https://trusted.com' }).isAllowed('https://exčample.com'), false);
     assert.equal(validateCorsOrigin('https://trusted.com'), 'https://trusted.com');
+    assert.equal(validateCorsOrigin('HTTPS://TRUSTED.COM'), 'https://trusted.com');
   });
 
   test(label + ': wildcard subdomain patterns are anchored', () => {
