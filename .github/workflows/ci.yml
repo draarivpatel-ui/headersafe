@@ -28,6 +28,12 @@ jobs:
           cp cjs/index.cjs /tmp/headersafe-cjs-before.cjs
           node scripts/build-cjs.mjs
           diff -u /tmp/headersafe-cjs-before.cjs cjs/index.cjs
+      - name: Install development dependencies
+        shell: bash
+        run: npm ci
       - name: Run deterministic test suite
         shell: bash
         run: node --test tests/*.test.mjs
+      - name: Run property-based fuzz tests
+        shell: bash
+        run: npm run test:fuzz

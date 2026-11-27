@@ -99,7 +99,7 @@ test('package.json declares correct dual-module entry points', async () => {
   assert.equal(pkg.module, './src/index.mjs');
   assert.equal(pkg.types, './types/index.d.ts');
   assert.deepEqual(pkg.dependencies, {});
-  assert.deepEqual(pkg.devDependencies, {});
+  assert.deepEqual(pkg.devDependencies, { 'fast-check': '4.10.3' });
   assert.equal(pkg.exports['.'].import, './src/index.mjs');
   assert.equal(pkg.exports['.'].require, './cjs/index.cjs');
   assert.equal(pkg.exports['.'].types, './types/index.d.ts');
