@@ -1,5 +1,7 @@
 # headersafe
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/draarivpatel-ui/headersafe/badge)](https://scorecard.dev/viewer/?uri=github.com/draarivpatel-ui/headersafe)
+
 Zero-dependency HTTP security headers for Node.js and Web Standards.
 
 Strict CSP Level 3, hardened CORS, RFC 6265bis cookie prefixes, and a complete
