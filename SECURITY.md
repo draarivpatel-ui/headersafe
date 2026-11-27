@@ -8,9 +8,7 @@
 
 ## Reporting a vulnerability
 
-Do not open a public issue for a security vulnerability. Use the repository's
-private security advisory form, or contact the maintainers through the contact
-method listed on the npm package page.
+Use the private GitHub Security Advisories form: [Report a vulnerability](https://github.com/draarivpatel-ui/headersafe/security/advisories/new). Do not open a public issue for an exploitable finding.
 
 Include:
 
@@ -19,8 +17,7 @@ Include:
 - the expected and actual header output
 - the browser or runtime where the impact was observed
 
-You should receive an acknowledgement within seven days. Fixes are released as
-patch versions with a regression test added to the deterministic suite.
+We acknowledge reports within 48 hours. We aim to confirm or reject the report within 7 days, release a fix as soon as practical, and coordinate public disclosure with the reporter. Unless a shorter deadline is required by an actively exploited issue, please allow up to 90 days for a coordinated fix and disclosure. Fixes are released as patch versions with a regression test added to the deterministic suite.
 
 ## Scope
 
